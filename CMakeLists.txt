@@ -22,6 +22,7 @@ set(SOURCES
     src/MemoryBlock.cpp
     src/MemoryPool.cpp
     src/HistoryManager.cpp
+    src/TUI.cpp
 )
 
 # Executable

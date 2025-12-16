@@ -1,139 +1,120 @@
 #include "MemoryPool.h"
 #include "HistoryManager.h"
+#include "TUI.h"
 
 #include <iostream>
-#include <iomanip>
-#include <string>
 #include <limits>
-#include <cstdlib>
+#include <string>
+#include <sstream>
 
 using namespace mem;
 
-// 策略名称（中英文）
-const char* strategyToStringCN(AllocationStrategy strategy) {
-    switch (strategy) {
-        case AllocationStrategy::FirstFit:  return "首次适应 (First Fit)";
-        case AllocationStrategy::BestFit:   return "最佳适应 (Best Fit)";
-        case AllocationStrategy::WorstFit:  return "最差适应 (Worst Fit)";
+// 读取正整数（支持直接按 Enter 使用默认值）
+std::size_t readSizeWithDefault(const std::string& prompt, std::size_t defaultValue) {
+    std::cout << prompt;
+    std::string line;
+    std::getline(std::cin, line);
+
+    // 如果输入为空，返回默认值
+    if (line.empty()) {
+        return defaultValue;
     }
-    return "未知";
-}
 
-// 清屏（跨平台）
-void clearScreen() {
-#ifdef _WIN32
-    std::system("cls");
-#else
-    std::system("clear");
-#endif
-}
+    // 尝试解析数字
+    std::istringstream iss(line);
+    std::size_t value;
+    if (iss >> value) {
+        return value;
+    }
 
-// 打印主菜单
-void printMenu(const MemoryPool& pool) {
-    std::cout << "\n";
-    std::cout << "╔════════════════════════════════════════════════════╗\n";
-    std::cout << "║           动态内存管理模拟器 v1.0                  ║\n";
-    std::cout << "╠════════════════════════════════════════════════════╣\n";
-    std::cout << "║  内存池大小: " << std::setw(6) << pool.getTotalSize() << " 字节"
-              << "    当前策略: " << strategyToStringCN(pool.getStrategy()) << std::setw(8) << " ║\n";
-    std::cout << "╠════════════════════════════════════════════════════╣\n";
-    std::cout << "║  [1] 分配内存                                      ║\n";
-    std::cout << "║  [2] 释放内存                                      ║\n";
-    std::cout << "║  [3] 显示内存状态                                  ║\n";
-    std::cout << "║  [4] 显示内存地图（可视化）                        ║\n";
-    std::cout << "║  [5] 碎片分析                                      ║\n";
-    std::cout << "║  [6] 切换分配策略                                  ║\n";
-    std::cout << "║  [7] 查看操作历史                                  ║\n";
-    std::cout << "║  [8] 清空历史记录                                  ║\n";
-    std::cout << "║  [0] 退出程序                                      ║\n";
-    std::cout << "╚════════════════════════════════════════════════════╝\n";
-    std::cout << "  请选择操作: ";
-}
-
-// 打印策略选择菜单
-void printStrategyMenu() {
-    std::cout << "\n选择分配策略:\n";
-    std::cout << "  [1] 首次适应 (First Fit) - 选择第一个足够大的空闲块\n";
-    std::cout << "  [2] 最佳适应 (Best Fit)  - 选择最小的足够大的空闲块\n";
-    std::cout << "  [3] 最差适应 (Worst Fit) - 选择最大的空闲块\n";
-    std::cout << "  [0] 取消\n";
-    std::cout << "  请选择: ";
+    // 解析失败，返回默认值
+    return defaultValue;
 }
 
 // 读取正整数
 std::size_t readSize(const std::string& prompt) {
-    std::size_t value;
     std::cout << prompt;
-    while (!(std::cin >> value)) {
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::cout << "输入无效，请重新输入。" << prompt;
+    std::string line;
+    std::getline(std::cin, line);
+
+    std::istringstream iss(line);
+    std::size_t value;
+    if (iss >> value && value > 0) {
+        return value;
     }
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    return value;
+
+    std::cout << "  输入无效，请重新输入。";
+    return readSize(prompt);
 }
 
 // 读取整数
 int readInt(const std::string& prompt) {
-    int value;
     std::cout << prompt;
-    while (!(std::cin >> value)) {
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::cout << "输入无效，请重新输入。" << prompt;
-    }
-    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-    return value;
-}
+    std::string line;
+    std::getline(std::cin, line);
 
-// 暂停等待用户输入
-void pause() {
-    std::cout << "\n按回车键继续...";
-    std::cin.get();
+    std::istringstream iss(line);
+    int value;
+    if (iss >> value) {
+        return value;
+    }
+
+    std::cout << "  输入无效，请重新输入。";
+    return readInt(prompt);
 }
 
 int main() {
-    // 默认内存池大小
-    constexpr std::size_t DEFAULT_POOL_SIZE = 1024;
+    // 启动界面
+    tui::clearScreen();
+    std::cout << "\n";
+    std::cout << "  " << tui::color::BOLD << tui::color::CYAN;
+    std::cout << "内存管理模拟器 v2.0" << tui::color::RESET << "\n\n";
 
-    std::cout << "╔════════════════════════════════════════════════════╗\n";
-    std::cout << "║           动态内存管理模拟器 v1.0                  ║\n";
-    std::cout << "╚════════════════════════════════════════════════════╝\n\n";
-
-    std::size_t poolSize = readSize("请输入内存池大小（字节）[默认=1024]: ");
+    std::size_t poolSize = readSizeWithDefault("  请输入内存池大小（字节）[默认=1024]: ", 1024);
     if (poolSize == 0) {
-        poolSize = DEFAULT_POOL_SIZE;
+        poolSize = 1024;
     }
 
     MemoryPool pool(poolSize);
     HistoryManager history;
 
+    std::string lastMessage;
+    tui::MessageType lastMsgType = tui::MessageType::Info;
+
     int choice = -1;
 
     while (choice != 0) {
-        printMenu(pool);
+        // 绘制主界面（自动显示内存状态）
+        tui::drawMainScreen(pool, lastMessage, lastMsgType);
+        lastMessage.clear();
 
-        if (!(std::cin >> choice)) {
-            std::cin.clear();
-            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-            std::cout << "输入无效，请输入数字。\n";
-            pause();
+        std::string line;
+        std::getline(std::cin, line);
+
+        if (line.empty()) {
             continue;
         }
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+
+        std::istringstream iss(line);
+        if (!(iss >> choice)) {
+            lastMessage = "输入无效，请输入数字。";
+            lastMsgType = tui::MessageType::Error;
+            continue;
+        }
 
         switch (choice) {
             case 1: {
                 // 分配内存
-                std::size_t size = readSize("请输入要分配的大小（字节）: ");
+                std::cout << "\n";
+                std::size_t size = readSize("  请输入要分配的大小（字节）: ");
                 if (size == 0) {
-                    std::cout << "错误：大小必须大于 0。\n";
+                    lastMessage = "大小必须大于 0。";
+                    lastMsgType = tui::MessageType::Error;
                     break;
                 }
 
                 auto result = pool.allocate(size);
                 if (result.has_value()) {
-                    // 查找块以获取其地址
                     const MemoryBlock* block = pool.getHead();
                     std::size_t address = 0;
                     while (block != nullptr) {
@@ -145,22 +126,22 @@ int main() {
                     }
 
                     history.recordAllocation(result.value(), size, address, true);
-                    std::cout << "\n分配成功！已分配 " << size << " 字节。\n";
-                    std::cout << "块 ID: " << result.value() << "，起始地址: " << address << "\n";
+                    lastMessage = "已分配 " + std::to_string(size) + " 字节，地址 " +
+                                  std::to_string(address) + "，ID: " + std::to_string(result.value());
+                    lastMsgType = tui::MessageType::Success;
                 } else {
                     history.recordAllocation(-1, size, 0, false);
-                    std::cout << "\n错误：无法分配 " << size << " 字节。\n";
-                    std::cout << "没有足够的连续空闲内存。\n";
+                    lastMessage = "分配失败：没有足够的连续空间分配 " + std::to_string(size) + " 字节。";
+                    lastMsgType = tui::MessageType::Error;
                 }
-                pause();
                 break;
             }
 
             case 2: {
                 // 释放内存
-                int blockId = readInt("请输入要释放的块 ID: ");
+                std::cout << "\n";
+                int blockId = readInt("  请输入要释放的块 ID: ");
 
-                // 释放前查找块信息
                 const MemoryBlock* block = pool.getHead();
                 std::size_t size = 0;
                 std::size_t address = 0;
@@ -177,112 +158,98 @@ int main() {
                 history.recordDeallocation(blockId, size, address, success);
 
                 if (success) {
-                    std::cout << "\n释放成功！已释放块 ID " << blockId << "。\n";
+                    lastMessage = "已释放块 ID " + std::to_string(blockId) + "（" + std::to_string(size) + " 字节）";
+                    lastMsgType = tui::MessageType::Success;
                 } else {
-                    std::cout << "\n错误：块 ID " << blockId << " 未找到或已释放。\n";
+                    lastMessage = "块 ID " + std::to_string(blockId) + " 未找到或已释放。";
+                    lastMsgType = tui::MessageType::Error;
                 }
-                pause();
                 break;
             }
 
             case 3: {
-                // 显示内存状态
-                pool.displayStatus(std::cout);
-                pause();
+                // 显示块详情
+                tui::drawBlockDetails(pool, std::cout);
+                tui::waitForEnter();
                 break;
             }
 
             case 4: {
-                // 显示内存地图
-                pool.displayStatus(std::cout);
-                pool.displayVisual(std::cout);
-                pause();
-                break;
-            }
+                // 切换策略
+                tui::drawStrategyMenu(pool.getStrategy(), std::cout);
 
-            case 5: {
-                // 碎片分析
-                auto stats = pool.getStats();
-                std::cout << "\n=== 碎片分析 ===\n";
-                std::cout << "总内存:       " << stats.totalSize << " 字节\n";
-                std::cout << "已用内存:     " << stats.usedSize << " 字节\n";
-                std::cout << "空闲内存:     " << stats.freeSize << " 字节\n";
-                std::cout << "总块数:       " << stats.blockCount << "\n";
-                std::cout << "空闲块数:     " << stats.freeBlockCount << "\n";
-                std::cout << "已分配块数:   " << stats.allocatedBlockCount << "\n";
-                std::cout << "最大空闲块:   " << stats.largestFreeBlock << " 字节\n";
-                std::cout << "-------------------------------\n";
-                std::cout << "外部碎片率: " << std::fixed << std::setprecision(1)
-                          << (stats.fragmentationRate * 100) << "%\n";
-
-                if (stats.fragmentationRate > 0.5) {
-                    std::cout << "警告：检测到高碎片率！\n";
-                } else if (stats.fragmentationRate > 0.25) {
-                    std::cout << "提示：存在中等碎片。\n";
-                } else {
-                    std::cout << "状态：碎片率较低。\n";
-                }
-                pause();
-                break;
-            }
-
-            case 6: {
-                // 切换分配策略
-                printStrategyMenu();
+                std::string strategyLine;
+                std::getline(std::cin, strategyLine);
+                std::istringstream strategyIss(strategyLine);
                 int strategyChoice = 0;
-                std::cin >> strategyChoice;
-                std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+                if (!(strategyIss >> strategyChoice)) {
+                    lastMessage = "输入无效。";
+                    lastMsgType = tui::MessageType::Error;
+                    break;
+                }
 
                 switch (strategyChoice) {
                     case 1:
                         pool.setStrategy(AllocationStrategy::FirstFit);
-                        std::cout << "策略已切换为：首次适应 (First Fit)\n";
+                        lastMessage = "策略已切换为：首次适应 (First Fit)";
+                        lastMsgType = tui::MessageType::Success;
                         break;
                     case 2:
                         pool.setStrategy(AllocationStrategy::BestFit);
-                        std::cout << "策略已切换为：最佳适应 (Best Fit)\n";
+                        lastMessage = "策略已切换为：最佳适应 (Best Fit)";
+                        lastMsgType = tui::MessageType::Success;
                         break;
                     case 3:
                         pool.setStrategy(AllocationStrategy::WorstFit);
-                        std::cout << "策略已切换为：最差适应 (Worst Fit)\n";
+                        lastMessage = "策略已切换为：最差适应 (Worst Fit)";
+                        lastMsgType = tui::MessageType::Success;
                         break;
                     case 0:
-                        std::cout << "已取消。\n";
+                        lastMessage = "已取消。";
+                        lastMsgType = tui::MessageType::Info;
                         break;
                     default:
-                        std::cout << "无效选择。\n";
+                        lastMessage = "无效选择。";
+                        lastMsgType = tui::MessageType::Error;
                 }
-                pause();
                 break;
             }
 
-            case 7: {
-                // 查看操作历史
+            case 5: {
+                // 显示历史记录
+                tui::clearScreen();
+                std::cout << "\n";
+                std::cout << "  " << tui::color::BOLD << tui::color::CYAN;
+                std::cout << "操作历史" << tui::color::RESET << "\n\n";
                 history.displayHistory(std::cout);
                 history.displaySummary(std::cout);
-                pause();
+                tui::waitForEnter();
                 break;
             }
 
-            case 8: {
-                // 清空历史记录
-                history.clear();
-                std::cout << "历史记录已清空。\n";
-                pause();
+            case 6: {
+                // 碎片分析
+                tui::drawFragmentAnalysis(pool, std::cout);
+                tui::waitForEnter();
                 break;
             }
 
-            case 0:
+            case 0: {
                 // 退出
-                std::cout << "\n=== 最终统计 ===\n";
-                pool.displayStatus(std::cout);
+                tui::clearScreen();
+                std::cout << "\n";
+                std::cout << "  " << tui::color::BOLD << tui::color::CYAN;
+                std::cout << "最终统计" << tui::color::RESET << "\n\n";
+                tui::drawMemoryBar(pool.getStats(), std::cout);
+                std::cout << "\n";
                 history.displaySummary(std::cout);
-                std::cout << "\n再见！\n";
+                std::cout << "\n  再见！\n\n";
                 break;
+            }
 
             default:
-                std::cout << "无效选择，请重试。\n";
-                pause();
+                lastMessage = "无效选择，请重试。";
+                lastMsgType = tui::MessageType::Warning;
         }
     }
 
