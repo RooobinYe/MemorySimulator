@@ -1,5 +1,6 @@
 #include "MemoryBlock.h"
 #include <iomanip>
+#include <string>
 
 namespace mem {
 
