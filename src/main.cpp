@@ -3,6 +3,10 @@
 #include "TUI.h"
 
 #include <iostream>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include <limits>
 #include <string>
 #include <sstream>
@@ -64,6 +68,12 @@ int readInt(const std::string& prompt) {
 }
 
 int main() {
+#ifdef _WIN32
+    // 设置 Windows 控制台为 UTF-8 编码
+    SetConsoleOutputCP(65001);
+    SetConsoleCP(65001);
+#endif
+
     // 启动界面
     tui::clearScreen();
     std::cout << "\n";
