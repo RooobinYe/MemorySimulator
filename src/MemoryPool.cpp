@@ -8,12 +8,10 @@ namespace mem {
 
 MemoryPool::MemoryPool(std::size_t totalSize, AllocationStrategy strategy)
     : m_totalSize(totalSize)
-    , m_head(nullptr)
+    , m_head(std::make_unique<MemoryBlock>(0, totalSize, true, MemoryBlock::INVALID_ID))
     , m_strategy(strategy)
     , m_nextBlockId(1)
 {
-    // Initialize with a single free block spanning the entire pool
-    m_head = new MemoryBlock(0, totalSize, true, MemoryBlock::INVALID_ID);
 }
 
 MemoryPool::~MemoryPool() {
@@ -22,35 +20,27 @@ MemoryPool::~MemoryPool() {
 
 MemoryPool::MemoryPool(MemoryPool&& other) noexcept
     : m_totalSize(other.m_totalSize)
-    , m_head(other.m_head)
+    , m_head(std::move(other.m_head))
     , m_strategy(other.m_strategy)
     , m_nextBlockId(other.m_nextBlockId)
 {
-    other.m_head = nullptr;
     other.m_totalSize = 0;
 }
 
 MemoryPool& MemoryPool::operator=(MemoryPool&& other) noexcept {
     if (this != &other) {
-        cleanup();
         m_totalSize = other.m_totalSize;
-        m_head = other.m_head;
+        m_head = std::move(other.m_head);
         m_strategy = other.m_strategy;
         m_nextBlockId = other.m_nextBlockId;
-        other.m_head = nullptr;
         other.m_totalSize = 0;
     }
     return *this;
 }
 
 void MemoryPool::cleanup() {
-    MemoryBlock* current = m_head;
-    while (current != nullptr) {
-        MemoryBlock* next = current->getNext();
-        delete current;
-        current = next;
-    }
-    m_head = nullptr;
+    // unique_ptr 自动管理内存，只需重置即可
+    m_head.reset();
 }
 
 // ================== Core Operations ==================
@@ -110,7 +100,7 @@ MemoryBlock* MemoryPool::findBlock(std::size_t size) {
 
 MemoryBlock* MemoryPool::findFirstFit(std::size_t size) {
     // Find the first free block that is large enough
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         if (current->isFree() && current->getSize() >= size) {
             return current;
@@ -125,7 +115,7 @@ MemoryBlock* MemoryPool::findBestFit(std::size_t size) {
     MemoryBlock* bestBlock = nullptr;
     std::size_t smallestSize = std::numeric_limits<std::size_t>::max();
 
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         if (current->isFree() && current->getSize() >= size) {
             if (current->getSize() < smallestSize) {
@@ -143,7 +133,7 @@ MemoryBlock* MemoryPool::findWorstFit(std::size_t size) {
     MemoryBlock* worstBlock = nullptr;
     std::size_t largestSize = 0;
 
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         if (current->isFree() && current->getSize() >= size) {
             if (current->getSize() > largestSize) {
@@ -157,7 +147,7 @@ MemoryBlock* MemoryPool::findWorstFit(std::size_t size) {
 }
 
 MemoryBlock* MemoryPool::findBlockById(int blockId) {
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         if (current->getId() == blockId) {
             return current;
@@ -178,7 +168,7 @@ void MemoryPool::splitBlock(MemoryBlock* block, std::size_t size) {
     }
 
     // Create a new free block for the remaining space
-    auto* newBlock = new MemoryBlock(
+    auto newBlock = std::make_unique<MemoryBlock>(
         block->getStartAddress() + size,
         remainingSize,
         true,
@@ -189,17 +179,23 @@ void MemoryPool::splitBlock(MemoryBlock* block, std::size_t size) {
     block->setSize(size);
 
     // Insert the new block after the current block
-    insertAfter(block, newBlock);
+    insertAfter(block, newBlock.release());
 }
 
 void MemoryPool::insertAfter(MemoryBlock* block, MemoryBlock* newBlock) {
-    newBlock->setNext(block->getNext());
+    // 保存原来的 next
+    auto oldNext = block->releaseNext();
+
+    // 新块指向原来的 next
+    newBlock->setNext(std::move(oldNext));
     newBlock->setPrev(block);
 
-    if (block->getNext() != nullptr) {
-        block->getNext()->setPrev(newBlock);
+    if (newBlock->getNext() != nullptr) {
+        newBlock->getNext()->setPrev(newBlock);
     }
-    block->setNext(newBlock);
+
+    // block 指向新块
+    block->setNext(std::unique_ptr<MemoryBlock>(newBlock));
 }
 
 void MemoryPool::mergeAdjacentFreeBlocks(MemoryBlock* block) {
@@ -207,24 +203,31 @@ void MemoryPool::mergeAdjacentFreeBlocks(MemoryBlock* block) {
     while (block->getNext() != nullptr && block->getNext()->isFree()) {
         MemoryBlock* next = block->getNext();
         block->setSize(block->getSize() + next->getSize());
-        block->setNext(next->getNext());
-        if (next->getNext() != nullptr) {
-            next->getNext()->setPrev(block);
+
+        // 获取 next 的 next，然后删除 next
+        auto nextNext = next->releaseNext();
+        block->setNext(std::move(nextNext));
+
+        if (block->getNext() != nullptr) {
+            block->getNext()->setPrev(block);
         }
-        delete next;
+        // next 会在 block->setNext() 时自动被删除
     }
 
     // Merge with previous block if it's free
     while (block->getPrev() != nullptr && block->getPrev()->isFree()) {
         MemoryBlock* prev = block->getPrev();
         prev->setSize(prev->getSize() + block->getSize());
-        prev->setNext(block->getNext());
-        if (block->getNext() != nullptr) {
-            block->getNext()->setPrev(prev);
+
+        // 获取 block 的 next
+        auto blockNext = block->releaseNext();
+        prev->setNext(std::move(blockNext));
+
+        if (prev->getNext() != nullptr) {
+            prev->getNext()->setPrev(prev);
         }
-        MemoryBlock* toDelete = block;
+        // block 会在 prev->setNext() 时自动被删除
         block = prev;
-        delete toDelete;
     }
 }
 
@@ -240,7 +243,7 @@ PoolStats MemoryPool::getStats() const {
     stats.allocatedBlockCount = 0;
     stats.largestFreeBlock = 0;
 
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         stats.blockCount++;
         if (current->isFree()) {
@@ -274,7 +277,7 @@ void MemoryPool::displayStatus(std::ostream& os) const {
     os << "|   ID   |   起始   |   大小   |  状态  |   结束   |\n";
     os << "+--------+----------+----------+--------+----------+\n";
 
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         os << *current << "\n";
         current = current->getNext();
@@ -299,7 +302,7 @@ void MemoryPool::displayVisual(std::ostream& os, std::size_t width) const {
     os << "\n内存地图:\n";
     os << "[";
 
-    MemoryBlock* current = m_head;
+    MemoryBlock* current = m_head.get();
     while (current != nullptr) {
         // Calculate visual width for this block
         std::size_t blockWidth = (current->getSize() * width) / m_totalSize;

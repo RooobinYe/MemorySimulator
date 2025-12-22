@@ -2,6 +2,7 @@
 #define MEMORY_BLOCK_H
 
 #include <cstddef>
+#include <memory>
 #include <ostream>
 
 namespace mem {
@@ -28,15 +29,18 @@ public:
     [[nodiscard]] std::size_t getEndAddress() const noexcept { return m_startAddr + m_size - 1; }
     [[nodiscard]] bool isFree() const noexcept { return m_isFree; }
 
-    [[nodiscard]] MemoryBlock* getNext() const noexcept { return m_next; }
+    [[nodiscard]] MemoryBlock* getNext() const noexcept { return m_next.get(); }
     [[nodiscard]] MemoryBlock* getPrev() const noexcept { return m_prev; }
 
     // Mutators
     void setId(int id) noexcept { m_id = id; }
     void setSize(std::size_t size) noexcept { m_size = size; }
     void setFree(bool free) noexcept { m_isFree = free; }
-    void setNext(MemoryBlock* next) noexcept { m_next = next; }
+    void setNext(std::unique_ptr<MemoryBlock> next) noexcept;
     void setPrev(MemoryBlock* prev) noexcept { m_prev = prev; }
+
+    // 智能指针操作
+    [[nodiscard]] std::unique_ptr<MemoryBlock> releaseNext() noexcept { return std::move(m_next); }
 
     // Utility
     void print(std::ostream& os) const;
@@ -49,8 +53,8 @@ private:
     std::size_t m_size = 0;         // Block size in bytes
     bool m_isFree = true;           // Allocation status
 
-    MemoryBlock* m_prev = nullptr;  // Previous block in list
-    MemoryBlock* m_next = nullptr;  // Next block in list
+    MemoryBlock* m_prev = nullptr;              // Previous block (observer, non-owning)
+    std::unique_ptr<MemoryBlock> m_next;        // Next block (owning)
 };
 
 } // namespace mem

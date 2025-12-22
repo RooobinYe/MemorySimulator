@@ -10,8 +10,12 @@ MemoryBlock::MemoryBlock(std::size_t startAddr, std::size_t size, bool isFree, i
     , m_size(size)
     , m_isFree(isFree)
     , m_prev(nullptr)
-    , m_next(nullptr)
+    // m_next 默认初始化为 nullptr
 {
+}
+
+void MemoryBlock::setNext(std::unique_ptr<MemoryBlock> next) noexcept {
+    m_next = std::move(next);
 }
 
 void MemoryBlock::print(std::ostream& os) const {

@@ -75,10 +75,7 @@ int main() {
 #endif
 
     // 启动界面
-    tui::clearScreen();
-    std::cout << "\n";
-    std::cout << "  " << tui::color::BOLD << tui::color::CYAN;
-    std::cout << "内存管理模拟器 v2.0" << tui::color::RESET << "\n\n";
+    tui::drawSplashScreen();
 
     std::size_t poolSize = readSizeWithDefault("  请输入内存池大小（字节）[默认=1024]: ", 1024);
     if (poolSize == 0) {

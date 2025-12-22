@@ -56,6 +56,11 @@ constexpr int MEMORY_BAR_WIDTH = 40;
 void clearScreen();
 
 /**
+ * @brief 绘制启动画面（ASCII Art Logo）
+ */
+void drawSplashScreen();
+
+/**
  * @brief 绘制主界面（含内存状态）
  */
 void drawMainScreen(const mem::MemoryPool& pool, const std::string& lastMessage = "", MessageType msgType = MessageType::Info);

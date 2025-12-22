@@ -6,6 +6,7 @@
 #include <optional>
 #include <string_view>
 #include <functional>
+#include <memory>
 
 namespace mem {
 
@@ -91,7 +92,7 @@ public:
 
     // Accessors
     [[nodiscard]] std::size_t getTotalSize() const noexcept { return m_totalSize; }
-    [[nodiscard]] const MemoryBlock* getHead() const noexcept { return m_head; }
+    [[nodiscard]] const MemoryBlock* getHead() const noexcept { return m_head.get(); }
 
 private:
     // Memory block finding algorithms
@@ -110,7 +111,7 @@ private:
 
     // Member variables
     std::size_t m_totalSize;
-    MemoryBlock* m_head;
+    std::unique_ptr<MemoryBlock> m_head;
     AllocationStrategy m_strategy;
     int m_nextBlockId;
 };
