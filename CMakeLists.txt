@@ -16,20 +16,42 @@ endif()
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Source files
-set(SOURCES
-    src/main.cpp
+# Source files (excluding main.cpp for library)
+set(LIB_SOURCES
     src/MemoryBlock.cpp
     src/MemoryPool.cpp
     src/HistoryManager.cpp
     src/TUI.cpp
 )
 
+# Main executable
+set(MAIN_SOURCES
+    src/main.cpp
+    ${LIB_SOURCES}
+)
+
 # Executable
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(${PROJECT_NAME} ${MAIN_SOURCES})
 
 # Output directory
 set_target_properties(${PROJECT_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+# ==================== 测试配置 ====================
+
+# 测试可执行文件
+set(TEST_SOURCES
+    test/MemoryPoolTest.cpp
+    ${LIB_SOURCES}
+)
+
+add_executable(MemoryPoolTest ${TEST_SOURCES})
+
+set_target_properties(MemoryPoolTest PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
+# 启用测试
+enable_testing()
+add_test(NAME MemoryPoolTest COMMAND MemoryPoolTest)
